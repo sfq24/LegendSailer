@@ -30,7 +30,9 @@ namespace LegendSailer
 
             //Init the arrays and lists
             boatVertices = boatObj.GetComponent<MeshFilter>().mesh.vertices;
-            boatTriangles = boatObj.GetComponent<MeshFilter>().mesh.triangles;
+            boatTriangles = boatObj.GetComponent<MeshFilter>().mesh.triangles;    //Triangle是组成三角形的定点按顺序的定点序号
+            //比如，第一个三角形是由vertice 1， 7， 10 组成的，那么triangle的前三个int就是1,7,10
+            //之后可以根据此序号从vertices变量中找到对应的顶点信息
 
             //The boat vertices in global position
             boatVerticesGlobal = new Vector3[boatVertices.Length];
@@ -289,6 +291,7 @@ namespace LegendSailer
                 Vector3 p2 = boatTrans.InverseTransformPoint(triangesData[i].p2);
                 Vector3 p3 = boatTrans.InverseTransformPoint(triangesData[i].p3);
 
+                //自己构建vertice与triangle对应关系
                 vertices.Add(p1);
                 triangles.Add(vertices.Count - 1);
 

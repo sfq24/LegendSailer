@@ -5,7 +5,8 @@ namespace LegendSailer
 {
     public class BoatPhysics : MonoBehaviour
     {
-        //Drags
+        //水下部分只是为了染色，看起来方便
+        //对漂浮本身不起作用
         public GameObject underWaterObj;
 
         //Script that's doing everything needed with the boat mesh, such as finding out which part is above the water
@@ -53,6 +54,7 @@ namespace LegendSailer
         //Add all forces that act on the squares below the water
         private void AddUnderWaterForces()
         {
+            //TODO: Do not need to use new data, since underWaterTriangleData only need to be read from this func
             //Get all triangles
             List<TriangleData> underWaterTriangleData = modifyBoatMesh.underWaterTriangleData;
 
@@ -64,7 +66,7 @@ namespace LegendSailer
                 //Calculate the buoyancy force
                 Vector3 buoyancyForce = BuoyancyForce(rhoWater, triangleData);
 
-                //Add the force to the boat
+                //Add the force to the center of triangle
                 boatRB.AddForceAtPosition(buoyancyForce, triangleData.center);
 
                 //Debug
