@@ -19,7 +19,9 @@ namespace LegendSailer
         public float noiseStrength = 1f;
         public float noiseWalk = 1f;
 
-        void Start()
+        //need to use Awake instead of Start, this obj need to be reference by other class
+        //If there all in start function, cannot ganrantee to get the reference ahead of time
+        void Awake()
         {
             current = this;
         }

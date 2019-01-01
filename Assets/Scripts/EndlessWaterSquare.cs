@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 using UnityEngine;
@@ -45,8 +46,9 @@ namespace LegendSailer
             //Init the time
             secondsSinceStart = Time.time;
 
+            //这两个方程是在另一个线程中计算并重画水面
             //Update the water in the thread
-            ThreadPool.QueueUserWorkItem(new WaitCallback(UpdateWaterWithThreadPooling));
+            ThreadPool.QueueUserWorkItem(new WaitCallback(UpdateWaterVerticesWithThreadPooling));
 
             //Start the coroutine
             StartCoroutine(UpdateWater());
@@ -62,10 +64,12 @@ namespace LegendSailer
             //Update the time since start to get correct wave height which depends on time since start
             secondsSinceStart = Time.time;
 
+            //多人模式，此处可修改为地图原点，让所有square的分辨度相同即可
             //Update the position of the boat to see if we should move the water
             boatPos = boatObj.transform.position;
         }
 
+        //TODO: update all water squares?
         //Update the water with no thread to compare
         private void UpdateWaterNoThread()
         {
@@ -109,7 +113,7 @@ namespace LegendSailer
                     hasThreadUpdatedWater = false;
 
                     //Update the water in the thread
-                    ThreadPool.QueueUserWorkItem(new WaitCallback(UpdateWaterWithThreadPooling));
+                    ThreadPool.QueueUserWorkItem(new WaitCallback(UpdateWaterVerticesWithThreadPooling));
                 }
 
                 //Don't need to update the water every frame
@@ -118,38 +122,45 @@ namespace LegendSailer
         }
 
         //The thread that updates the water vertices
-        private void UpdateWaterWithThreadPooling(object state)
+        private void UpdateWaterVerticesWithThreadPooling(object state)
         {
-            //Move the water to the boat
-            MoveWaterToBoat();
-
-            //Loop through all water squares
-            for (int i = 0; i < waterSquares.Count; i++)
+            try
             {
-                //The local center pos of this square
-                Vector3 centerPos = waterSquares[i].centerPos;
-                //All the vertices this square consists of
-                Vector3[] vertices = waterSquares[i].vertices;
+                MoveWaterToBoat();
 
-                //Update the vertices in this square
-                for (int j = 0; j < vertices.Length; j++)
+                //Loop through all water squares
+                for (int i = 0; i < waterSquares.Count; i++)
                 {
-                    //The local position of the vertex
-                    Vector3 vertexPos = vertices[j];
+                    //The local center pos of this square
+                    Vector3 centerPos = waterSquares[i].centerPos;
+                    //All the vertices this square consists of
+                    Vector3[] vertices = waterSquares[i].vertices;
 
-                    //Can't use transformpoint in a thread, so to find the global position of the vertex
-                    //we just add the position of the ocean and the square because rotation and scale is always 0 and 1
-                    Vector3 vertexPosGlobal = vertexPos + centerPos + oceanPos;
+                    //Update the vertices in this square
+                    for (int j = 0; j < vertices.Length; j++)
+                    {
+                        //The local position of the vertex
+                        Vector3 vertexPos = vertices[j];
 
-                    //Get the water height
-                    vertexPos.y = WaterController.current.GetWaveYPos(vertexPosGlobal, secondsSinceStart);
+                        //Can't use transformpoint in a thread, so to find the global position of the vertex
+                        //we just add the position of the ocean and the square because rotation and scale is always 0 and 1
+                        Vector3 vertexPosGlobal = vertexPos + centerPos + oceanPos;
 
-                    //Save the new y coordinate, but x and z are still in local position
-                    vertices[j] = vertexPos;
+                        //Get the water height
+                        vertexPos.y = WaterController.current.GetWaveYPos(vertexPosGlobal, secondsSinceStart);
+                    
+                        //Save the new y coordinate, but x and z are still in local position
+                        vertices[j] = vertexPos;
+                    }
                 }
-            }
 
-            hasThreadUpdatedWater = true;
+                hasThreadUpdatedWater = true;
+            }
+            catch(Exception ex)
+            {
+                hasThreadUpdatedWater = false;
+                Debug.Log("Source: "+ ex.Source + ex.Message );
+            }
 
             //Debug.Log("Thread finished");
         }

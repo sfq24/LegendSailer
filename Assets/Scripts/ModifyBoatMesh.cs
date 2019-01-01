@@ -4,8 +4,7 @@ using System.Collections.Generic;
 
 namespace LegendSailer
 {
-
-    //Generates the mesh that's below the water
+    //Generates the mesh that's below and above the water
     public class ModifyBoatMesh
     {
         //The boat transform needed to get the global position of a vertice
@@ -14,37 +13,85 @@ namespace LegendSailer
         Vector3[] boatVertices;
         //Positions in allVerticesArray, such as 0, 3, 5, to build triangles
         int[] boatTriangles;
+        //The boats rigidbody
+        private Rigidbody boatRB;
 
         //So we only need to make the transformation from local to global once
         public Vector3[] boatVerticesGlobal;
         //Find all the distances to water once because some triangles share vertices, so reuse
         float[] allDistancesToWater;
 
-        //The triangles belonging to the part of the boat that's under water
+        //The part of the boat that's under water - needed for calculations of length / volume
+        private Mesh underWaterMesh;
         public List<TriangleData> underWaterTriangleData = new List<TriangleData>();
 
-        public ModifyBoatMesh(GameObject boatObj)
+        //The part of the boat that's above water
+        public List<TriangleData> aboveWaterTriangleData = new List<TriangleData>();
+
+        //To approximate the underwater volume/length we need a mesh collider
+        private MeshCollider underWaterMeshCollider;
+
+        //Slamming resistance forces
+        //Data that belongs to one triangle in the original boat mesh
+        public List<SlammingForceData> slammingForceData = new List<SlammingForceData>();
+        //To connect the submerged triangles with the original triangles
+        public List<int> indexOfOriginalTriangle = new List<int>();
+        //The total area of the entire boat
+        public float boatArea;
+
+        float timeSinceStart;
+
+        public ModifyBoatMesh(GameObject boatObj, GameObject underWaterObj, GameObject aboveWaterObj, Rigidbody boatRB)
         {
             //Get the transform
             boatTrans = boatObj.transform;
 
+            //Get the rigid body
+            this.boatRB = boatRB;
+
+            //Get the meshcollider
+            underWaterMeshCollider = underWaterObj.GetComponent<MeshCollider>();
+
+            //Save the mesh
+            underWaterMesh = underWaterObj.GetComponent<MeshFilter>().mesh;
+
             //Init the arrays and lists
             boatVertices = boatObj.GetComponent<MeshFilter>().mesh.vertices;
-            boatTriangles = boatObj.GetComponent<MeshFilter>().mesh.triangles;    //Triangle是组成三角形的定点按顺序的定点序号
-            //比如，第一个三角形是由vertice 1， 7， 10 组成的，那么triangle的前三个int就是1,7,10
-            //之后可以根据此序号从vertices变量中找到对应的顶点信息
+            boatTriangles = boatObj.GetComponent<MeshFilter>().mesh.triangles;
 
             //The boat vertices in global position
             boatVerticesGlobal = new Vector3[boatVertices.Length];
             //Find all the distances to water once because some triangles share vertices, so reuse
             allDistancesToWater = new float[boatVertices.Length];
+
+            //Setup the slamming force data
+            for (int i = 0; i < (boatTriangles.Length / 3); i++)
+            {
+                slammingForceData.Add(new SlammingForceData());
+            }
+
+            //Calculate the area of the original triangles and the total area of the entire boat
+            CalculateOriginalTrianglesArea();
         }
 
-        //Generate the underwater mesh
+        //Generate the underwater mesh (and the abovewater mesh)
         public void GenerateUnderwaterMesh()
         {
             //Reset
+            aboveWaterTriangleData.Clear();
             underWaterTriangleData.Clear();
+
+            //Switch the submerged triangle area with the one in the previous time step
+            for (int j = 0; j < slammingForceData.Count; j++)
+            {
+                slammingForceData[j].previousSubmergedArea = slammingForceData[j].submergedArea;
+            }
+
+            indexOfOriginalTriangle.Clear();
+
+            //Make sure we find the distance to water with the same time
+            timeSinceStart = Time.time;
+
 
             //Find all the distances to water once because some triangles share vertices, so reuse
             for (int j = 0; j < boatVertices.Length; j++)
@@ -56,26 +103,30 @@ namespace LegendSailer
                 //And if we want to debug we can convert it back to local
                 boatVerticesGlobal[j] = globalPos;
 
-                allDistancesToWater[j] = WaterController.current.DistanceToWater(globalPos, Time.time);
+                allDistancesToWater[j] = WaterController.current.DistanceToWater(globalPos, timeSinceStart);
             }
 
-            //Add the triangles that are below the water
+            //Add the triangles
             AddTriangles();
         }
 
-        //Add all the triangles that's part of the underwater mesh
+
+
+        //Add all the triangles that's part of the underwater and abovewater meshes
         private void AddTriangles()
         {
             //List that will store the data we need to sort the vertices based on distance to water
             List<VertexData> vertexData = new List<VertexData>();
 
-            //Add init data that will be replaced
+            //Add fake data that will be replaced
             vertexData.Add(new VertexData());
             vertexData.Add(new VertexData());
             vertexData.Add(new VertexData());
 
+
             //Loop through all the triangles (3 vertices at a time = 1 triangle)
             int i = 0;
+            int triangleCounter = 0;
             while (i < boatTriangles.Length)
             {
                 //Loop through the 3 vertices
@@ -91,11 +142,22 @@ namespace LegendSailer
                     i++;
                 }
 
+
                 //All vertices are above the water
                 if (vertexData[0].distance > 0f && vertexData[1].distance > 0f && vertexData[2].distance > 0f)
                 {
+                    Vector3 p1 = vertexData[0].globalVertexPos;
+                    Vector3 p2 = vertexData[1].globalVertexPos;
+                    Vector3 p3 = vertexData[2].globalVertexPos;
+
+                    //Save the triangle
+                    aboveWaterTriangleData.Add(new TriangleData(p1, p2, p3, boatRB, timeSinceStart));
+
+                    slammingForceData[triangleCounter].submergedArea = 0f;
+
                     continue;
                 }
+
 
                 //Create the triangles that are below the waterline
 
@@ -107,7 +169,12 @@ namespace LegendSailer
                     Vector3 p3 = vertexData[2].globalVertexPos;
 
                     //Save the triangle
-                    underWaterTriangleData.Add(new TriangleData(p1, p2, p3));
+                    underWaterTriangleData.Add(new TriangleData(p1, p2, p3, boatRB, timeSinceStart));
+
+                    //We have already calculated the area of this triangle
+                    slammingForceData[triangleCounter].submergedArea = slammingForceData[triangleCounter].originalArea;
+
+                    indexOfOriginalTriangle.Add(triangleCounter);
                 }
                 //1 or 2 vertices are below the water
                 else
@@ -120,19 +187,23 @@ namespace LegendSailer
                     //One vertice is above the water, the rest is below
                     if (vertexData[0].distance > 0f && vertexData[1].distance < 0f && vertexData[2].distance < 0f)
                     {
-                        AddTrianglesOneAboveWater(vertexData);
+                        AddTrianglesOneAboveWater(vertexData, triangleCounter);
                     }
                     //Two vertices are above the water, the other is below
                     else if (vertexData[0].distance > 0f && vertexData[1].distance > 0f && vertexData[2].distance < 0f)
                     {
-                        AddTrianglesTwoAboveWater(vertexData);
+                        AddTrianglesTwoAboveWater(vertexData, triangleCounter);
                     }
                 }
+
+                triangleCounter += 1;
             }
         }
 
+
+
         //Build the new triangles where one of the old vertices is above the water
-        private void AddTrianglesOneAboveWater(List<VertexData> vertexData)
+        private void AddTrianglesOneAboveWater(List<VertexData> vertexData, int triangleCounter)
         {
             //H is always at position 0
             Vector3 H = vertexData[0].globalVertexPos;
@@ -173,6 +244,7 @@ namespace LegendSailer
                 h_L = vertexData[1].distance;
             }
 
+
             //Now we can calculate where we should cut the triangle to form 2 new triangles
             //because the resulting area will always form a square
 
@@ -185,6 +257,7 @@ namespace LegendSailer
 
             Vector3 I_M = MI_M + M;
 
+
             //Point I_L
             Vector3 LH = H - L;
 
@@ -194,14 +267,28 @@ namespace LegendSailer
 
             Vector3 I_L = LI_L + L;
 
-            //Save the data, such as normal, area, etc
-            //2 triangles below the water
-            underWaterTriangleData.Add(new TriangleData(M, I_M, I_L));
-            underWaterTriangleData.Add(new TriangleData(M, I_L, L));
+
+            //Save the data, such as normal, area, etc      
+            //2 triangles below the water  
+            underWaterTriangleData.Add(new TriangleData(M, I_M, I_L, boatRB, timeSinceStart));
+            underWaterTriangleData.Add(new TriangleData(M, I_L, L, boatRB, timeSinceStart));
+            //1 triangle above the water
+            aboveWaterTriangleData.Add(new TriangleData(I_M, H, I_L, boatRB, timeSinceStart));
+
+            //Calculate the total submerged area
+            float totalArea = BoatPhysicsMath.GetTriangleArea(M, I_M, I_L) + BoatPhysicsMath.GetTriangleArea(M, I_L, L);
+
+            slammingForceData[triangleCounter].submergedArea = totalArea;
+
+            indexOfOriginalTriangle.Add(triangleCounter);
+            //Add 2 times because 2 submerged triangles need to connect to the same original triangle
+            indexOfOriginalTriangle.Add(triangleCounter);
         }
 
+
+
         //Build the new triangles where two of the old vertices are above the water
-        private void AddTrianglesTwoAboveWater(List<VertexData> vertexData)
+        private void AddTrianglesTwoAboveWater(List<VertexData> vertexData, int triangleCounter)
         {
             //H and M are above the water
             //H is after the vertice that's below water, which is L
@@ -214,6 +301,7 @@ namespace LegendSailer
             {
                 H_index = 0;
             }
+
 
             //We also need the heights to water
             float h_L = vertexData[2].distance;
@@ -241,6 +329,7 @@ namespace LegendSailer
                 h_M = vertexData[1].distance;
             }
 
+
             //Now we can find where to cut the triangle
 
             //Point J_M
@@ -252,6 +341,7 @@ namespace LegendSailer
 
             Vector3 J_M = LJ_M + L;
 
+
             //Point J_H
             Vector3 LH = H - L;
 
@@ -261,23 +351,36 @@ namespace LegendSailer
 
             Vector3 J_H = LJ_H + L;
 
+
             //Save the data, such as normal, area, etc
-            //1 triangle below the water
-            underWaterTriangleData.Add(new TriangleData(L, J_H, J_M));
+            //1 triangle above the water
+            underWaterTriangleData.Add(new TriangleData(L, J_H, J_M, boatRB, timeSinceStart));
+            //2 triangles below the water
+            aboveWaterTriangleData.Add(new TriangleData(J_H, H, J_M, boatRB, timeSinceStart));
+            aboveWaterTriangleData.Add(new TriangleData(J_M, H, M, boatRB, timeSinceStart));
+
+            //Calculate the submerged area
+            slammingForceData[triangleCounter].submergedArea = BoatPhysicsMath.GetTriangleArea(L, J_H, J_M);
+
+            indexOfOriginalTriangle.Add(triangleCounter);
         }
+
+
 
         //Help class to store triangle data so we can sort the distances
         private class VertexData
         {
-            //The distance to water from this vertex
+            //The distance to water
             public float distance;
-            //An index so we can form clockwise triangles
+            //We also need to store a index so we can form clockwise triangles
             public int index;
             //The global Vector3 position of the vertex
             public Vector3 globalVertexPos;
         }
 
-        //Display the underwater mesh
+
+
+        //Display the underwater or abovewater mesh
         public void DisplayMesh(Mesh mesh, string name, List<TriangleData> triangesData)
         {
             List<Vector3> vertices = new List<Vector3>();
@@ -291,7 +394,6 @@ namespace LegendSailer
                 Vector3 p2 = boatTrans.InverseTransformPoint(triangesData[i].p2);
                 Vector3 p3 = boatTrans.InverseTransformPoint(triangesData[i].p3);
 
-                //自己构建vertice与triangle对应关系
                 vertices.Add(p1);
                 triangles.Add(vertices.Count - 1);
 
@@ -313,7 +415,52 @@ namespace LegendSailer
 
             mesh.triangles = triangles.ToArray();
 
+            //Important to recalculate bounds because we need the bounds to calculate the length of the underwater mesh
             mesh.RecalculateBounds();
+        }
+
+        //Calculate the length of the mesh that's below the water
+        public float CalculateUnderWaterLength()
+        {
+            //Approximate the length as the length of the underwater mesh
+            float underWaterLength = underWaterMesh.bounds.size.z;
+
+            //Debug.Log(underWaterMesh.bounds.size.z);
+
+            return underWaterLength;
+        }
+
+        //Calculate the area of each triangle in the boat mesh and store them in an array
+        private void CalculateOriginalTrianglesArea()
+        {
+            //Loop through all the triangles (3 vertices at a time = 1 triangle)
+            int i = 0;
+            int triangleCounter = 0;
+            while (i < boatTriangles.Length)
+            {
+                Vector3 p1 = boatVertices[boatTriangles[i]];
+
+                i++;
+
+                Vector3 p2 = boatVertices[boatTriangles[i]];
+
+                i++;
+
+                Vector3 p3 = boatVertices[boatTriangles[i]];
+
+                i++;
+
+                //Calculate the area of the triangle
+                float triangleArea = BoatPhysicsMath.GetTriangleArea(p1, p2, p3);
+
+                //Store the area in a list
+                slammingForceData[triangleCounter].originalArea = triangleArea;
+
+                //The total area
+                boatArea += triangleArea;
+
+                triangleCounter += 1;
+            }
         }
     }
 }
