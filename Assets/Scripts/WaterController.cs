@@ -77,7 +77,8 @@ namespace LegendSailer
             //x * z produces a moving sea without rolling waves
 
             float waveType = z;
-
+            z += Mathf.PerlinNoise(x + noiseWalk, y + Mathf.Sin(timeSinceStart * 0.1f)) * noiseStrength;
+            x += Mathf.Sin((timeSinceStart * speed + waveType) / waveDistance) * scale/2;
             y += Mathf.Sin((timeSinceStart * speed + waveType) / waveDistance) * scale;
 
             //Add noise to make it more realistic
