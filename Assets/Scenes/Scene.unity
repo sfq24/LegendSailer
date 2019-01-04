@@ -174,10 +174,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a8ab557f77a2ad44680a68c09eda8690, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  moveSpeed: 1.5
+  turnSpeed: 30
+  smooth: 5
   closestVerticeIndex: 0
+  previousVerticeIndex: 0
   closetVertice: {x: 0, y: 0, z: 0}
-  moveSpeed: 5
-  turnSpeed: 5
 --- !u!54 &408672325
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -635,6 +637,7 @@ GameObject:
   - component: {fileID: 569202036}
   - component: {fileID: 569202035}
   - component: {fileID: 569202034}
+  - component: {fileID: 569202037}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -658,7 +661,7 @@ Camera:
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 1
-  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
+  m_BackGroundColor: {r: 0, g: 0, b: 0, a: 1}
   m_projectionMatrixMode: 1
   m_SensorSize: {x: 36, y: 24}
   m_LensShift: {x: 0, y: 0}
@@ -671,7 +674,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 60
+  field of view: 40
   orthographic: 0
   orthographic size: 5
   m_Depth: -1
@@ -695,13 +698,26 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInternal: {fileID: 0}
   m_GameObject: {fileID: 569202033}
-  m_LocalRotation: {x: -0.23685955, y: -0.11625556, z: 0.0285603, w: -0.96414036}
-  m_LocalPosition: {x: -11.341604, y: 9.738705, z: -31.522282}
+  m_LocalRotation: {x: -0.29590455, y: -0.15359455, z: 0.048270702, w: -0.9415515}
+  m_LocalPosition: {x: -3.919569, y: 9.268572, z: -12.028578}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &569202037
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 0}
+  m_GameObject: {fileID: 569202033}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 44c74b03cf97eb048bccdf887cdf9dd0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  player: {fileID: 408672323}
+  smoothing: 5
 --- !u!1001 &621690062
 Prefab:
   m_ObjectHideFlags: 0

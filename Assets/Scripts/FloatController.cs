@@ -4,19 +4,23 @@ using UnityEngine;
 
 public class FloatController : MonoBehaviour {
 
-    public float moveSpeed = 3f;
-    public float turnSpeed = 100f;
+    public float moveSpeed = 1.5f;
+    public float turnSpeed = 30f;
+    public float smooth = 5f;
 
     private Transform seaPlane;
     private Cloth seaCloth;
+
     [SerializeField]
     private int closestVerticeIndex = 0;
+    [SerializeField]
+    private int previousVerticeIndex = 0;
+
     [SerializeField]
     private Vector3 closetVertice;
     Rigidbody playerRB;
 
-
-
+    private float distanceBetweenVertices = 0f;
 
     private void Awake()
     {
@@ -26,6 +30,7 @@ public class FloatController : MonoBehaviour {
     void Start () {
         seaPlane = GameObject.Find("SeaPlane").transform;
         seaCloth = seaPlane.GetComponent<Cloth>();
+        distanceBetweenVertices = seaCloth.transform.lossyScale.x;
 
     }
 	
@@ -34,6 +39,8 @@ public class FloatController : MonoBehaviour {
         //FloatingBoat();
         closetVertice = seaCloth.vertices[closestVerticeIndex];
         Debug.DrawRay(closetVertice, closetVertice.normalized);
+        //distanceBetweenVertices = Vector3.Distance(seaCloth.vertices[0], seaCloth.vertices[1]);
+        //Debug.Log("DistanceBetweenVertices:  " + distanceBetweenVertices);
     }
 
     private void FixedUpdate()
@@ -49,20 +56,21 @@ public class FloatController : MonoBehaviour {
         //TODO: check only the 8 nearest vertices
         for (int i = 0; i< seaCloth.vertices.Length; i++)
         {
-            float distance = Vector3.Distance(seaCloth.vertices[i], this.transform.position);
+            float distance = Vector3.Distance(
+                new Vector3(seaCloth.vertices[i].x, 0f, seaCloth.vertices[i].z),
+                new Vector3( this.transform.position.x, 0f, this.transform.position.z));
+
             if(distance < closetDistance)
             {
                 closetDistance = distance;
+
+                previousVerticeIndex = closestVerticeIndex;
                 closestVerticeIndex = i;
+                Debug.Log("Closest: " + closestVerticeIndex + "Previous: " + previousVerticeIndex);
             }
         }
 
         return seaCloth.vertices[closestVerticeIndex].y / seaCloth.transform.lossyScale.y;
-
-        //transform.localPosition = new Vector3(
-        //    transform.localPosition.x, 
-        //    seaCloth.vertices[closestVerticeIndex].y/seaCloth.transform.lossyScale.y, 
-        //    transform.localPosition.z);
 
     }
 
@@ -72,14 +80,18 @@ public class FloatController : MonoBehaviour {
         float moving = Input.GetAxisRaw("Vertical");
         Vector3 movement = transform.forward * moving * moveSpeed * Time.deltaTime;
         Vector3 floating = new Vector3(0, FloatingBoat(), 0);
-        //playerRB.MovePosition(playerRB.position + movement+ floating);
+        //playerRB.MovePosition(playerRB.position + movement + floating);
+        //float yPosition = Vector3.Lerp(
+        //    seaCloth.vertices[previousVerticeIndex],
+        //    seaCloth.vertices[closestVerticeIndex],
+        //    Vector3.Distance(transform.localPosition, seaCloth.vertices[previousVerticeIndex]) / distanceBetweenVertices).y / seaCloth.transform.lossyScale.y;
 
+        float yPosition = Mathf.Lerp(transform.localPosition.y, FloatingBoat(), smooth * Time.deltaTime);
 
         transform.localPosition = new Vector3(
             transform.localPosition.x + movement.x,
-            seaCloth.vertices[closestVerticeIndex].y / seaCloth.transform.lossyScale.y,
+            yPosition,
             transform.localPosition.z + movement.z);
-        //playerRB.AddForce(movement);
     }
 
     private void OnEnable()
